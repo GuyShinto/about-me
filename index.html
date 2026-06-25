@@ -40,23 +40,157 @@
 
 		function init() {
 
-			// Load Image
-			imageTexture = new THREE.TextureLoader().load('res/sample.jpg');
-			imageMaterial = new THREE.MeshBasicMaterial({
-				map: imageTexture
-			});
-
-			// init camera
-			camera = new THREE.PerspectiveCamera(55, 1080 / 720, 20, 3000);
+			// Bio viewer using THREE.js only
+			camera = new THREE.PerspectiveCamera(55, 1080 / 720, 1, 5000);
 			camera.position.z = 1000;
 			scene = new THREE.Scene();
 
-			// Add image plane
-			var planeGeometry = new THREE.PlaneGeometry(1080, 720, 1, 1);
-			var plane = new THREE.Mesh(planeGeometry, imageMaterial);
-			scene.add(plane);
-			plane.z = 0;
-			plane.scale.x = plane.scale.y = 1.45;
+			// 4:3 blue background to indicate bounds (using THREE only)
+			const bgWidth = 800*2; // 4:3 -> 800x600
+			const bgHeight = 600*2;
+			const bgGeo = new THREE.PlaneGeometry(bgWidth, bgHeight);
+			const bgMat = new THREE.MeshBasicMaterial({ color: 0x0000ff });
+			const bgPlane = new THREE.Mesh(bgGeo, bgMat);
+			bgPlane.position.set(0, 0, -100); // place behind content
+			scene.add(bgPlane);
+
+			const bios = [
+				{ name: 'X', desc: 'นักพัฒนาเว็บ ชื่นชอบงานด้านภาพและอินเทอร์แอคทีฟ', img: 'res/sample.jpg' },
+				{ name: 'yaju senpai', desc: 'นักออกแบบ UX/UI ทำงานด้านประสบการณ์ผู้ใช้', img: 'res/sample2.jpg' },
+				{ name: 'ml 250', desc: 'ช่างภาพและครีเอทีฟ ผู้ชอบถ่ายภาพทิวทัศน์', img: 'res/sample3.jpg' },
+				{ name: 'blue whale', desc: 'นักเขียนและนักแปล สนใจวรรณกรรมร่วมสมัย', img: 'res/sample4.jpg' }
+			];
+
+			let current = 0;
+
+			// image plane
+			const imgGeo = new THREE.PlaneGeometry(320, 280);
+			const imgMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+			const imgPlane = new THREE.Mesh(imgGeo, imgMat);
+			imgPlane.position.x = -180;
+			scene.add(imgPlane);
+
+			// text panel rendered via canvas texture
+			let textFont = 'Arial';
+			function makeTextTexture(title, body) {
+				const cw = 800, ch = 480;
+				const c = document.createElement('canvas');
+				c.width = cw; c.height = ch;
+				const ctx = c.getContext('2d');
+				ctx.fillStyle = '#111'; ctx.fillRect(0, 0, cw, ch);
+				ctx.fillStyle = '#fff'; ctx.font = '55px ' + textFont; ctx.fillText(title, 20, 60);
+				ctx.fillStyle = '#ccc'; ctx.font = '32px ' + textFont;
+				wrapText(ctx, body, 20, 150, cw - 40, 40);
+				return new THREE.CanvasTexture(c);
+			}
+
+			function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
+				const words = text.split(' ');
+				let line = '';
+				for (let n = 0; n < words.length; n++) {
+					const testLine = line + words[n] + ' ';
+					const metrics = ctx.measureText(testLine);
+					const testWidth = metrics.width;
+					if (testWidth > maxWidth && n > 0) {
+						ctx.fillText(line, x, y);
+						line = words[n] + ' ';
+						y += lineHeight;
+					} else {
+						line = testLine;
+					}
+				}
+				ctx.fillText(line, x, y);
+			}
+			
+			// text plane
+			const textGeo = new THREE.PlaneGeometry(560, 360);
+			const initialTextTex = makeTextTexture(bios[0].name, bios[0].desc);
+			const textMat = new THREE.MeshBasicMaterial({ map: initialTextTex });
+			const textPlane = new THREE.Mesh(textGeo, textMat);
+			textPlane.position.x = 260;
+			scene.add(textPlane);
+
+			// load image textures lazily
+			const loader = new THREE.TextureLoader();
+
+			function updateBio(i) {
+				const b = bios[i];
+				loader.load(b.img, function (tex) {
+					tex.encoding = THREE.sRGBEncoding;
+					imgPlane.material.map = tex;
+					imgPlane.material.needsUpdate = true;
+				});
+				const tex2 = makeTextTexture(b.name, b.desc);
+				textPlane.material.map = tex2;
+				textPlane.material.needsUpdate = true;
+			}
+
+			// simple prev/next button meshes
+			const btnGeo = new THREE.PlaneGeometry(80, 40);
+			const prevMat = new THREE.MeshBasicMaterial({ color: 0x777777 });
+			const nextMat = new THREE.MeshBasicMaterial({ color: 0x777777 });
+			const prevBtn = new THREE.Mesh(btnGeo, prevMat);
+			const nextBtn = new THREE.Mesh(btnGeo, nextMat);
+			prevBtn.position.set(-260, -220, 1);
+			nextBtn.position.set(-160, -220, 1);
+			scene.add(prevBtn, nextBtn);
+
+			// label buttons using canvas textures
+			function labelMesh(mesh, text) {
+				const c = document.createElement('canvas'); c.width = 256; c.height = 128;
+				const ctx = c.getContext('2d'); ctx.fillStyle = '#444'; ctx.fillRect(0, 0, c.width, c.height);
+				ctx.fillStyle = '#fff'; ctx.font = '100px Arial'; ctx.fillText(text, 40, 100);
+				const t = new THREE.CanvasTexture(c); mesh.material.map = t; mesh.material.needsUpdate = true;
+			}
+			labelMesh(prevBtn, 'Prev'); labelMesh(nextBtn, 'Next');
+
+			// interaction
+			const raycaster = new THREE.Raycaster();
+			const mouse = new THREE.Vector2();
+
+			function onClick(e) {
+				const rect = (renderer && renderer.domElement) ? renderer.domElement.getBoundingClientRect() : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
+				mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+				mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+				raycaster.setFromCamera(mouse, camera);
+				const hits = raycaster.intersectObjects([prevBtn, nextBtn]);
+				if (hits.length > 0) {
+					const obj = hits[0].object;
+					if (obj === prevBtn) {
+						current = (current - 1 + bios.length) % bios.length; updateBio(current);
+					} else if (obj === nextBtn) {
+						current = (current + 1) % bios.length; updateBio(current);
+					}
+				}
+			}
+
+			function onKey(e) {
+				if (e.key === 'ArrowLeft') { current = (current - 1 + bios.length) % bios.length; updateBio(current); }
+				if (e.key === 'ArrowRight') { current = (current + 1) % bios.length; updateBio(current); }
+			}
+
+			window.addEventListener('click', onClick, false);
+			window.addEventListener('keydown', onKey, false);
+
+			// load custom font then initial update
+			const fontUrl = 'fonts/VCR_OSD_MONO_1.ttf';
+			const fontName = 'VCR_OSD_MONO_1';
+			if (window.FontFace) {
+				try {
+					const f = new FontFace(fontName, `url(${fontUrl})`);
+					f.load().then(function(loaded){
+						document.fonts.add(loaded);
+						textFont = fontName;
+						updateBio(0);
+					}).catch(function(){
+						updateBio(0);
+					});
+				} catch (e) {
+					updateBio(0);
+				}
+			} else {
+				updateBio(0);
+			}
 
 			//add stats
 			stats = new Stats();
@@ -171,13 +305,13 @@
 
 		function randomizeParams() {
 
-			badTVParams.distortion = Math.random() * 6;
-			badTVParams.distortion2 = Math.random() * 6;
-			badTVParams.speed = Math.random() * 0.4;
-			badTVParams.rollSpeed = Math.random() * 0.2;
-			rgbParams.angle = Math.random() * 2;
-			rgbParams.amount = Math.random() * 0.02;
-			staticParams.amount = Math.random() * 0.2;
+			badTVParams.distortion = 0.5;
+			badTVParams.distortion2 = 0.5;
+			badTVParams.speed = 0.2;
+			badTVParams.rollSpeed = 0;
+			rgbParams.angle = 0;
+			rgbParams.amount = 0.002;
+			staticParams.amount = 0;
 
 			onParamsChange();
 		}
