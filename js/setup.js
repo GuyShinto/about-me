@@ -29,15 +29,15 @@
       
 
 			// 4:3 blue background to indicate bounds (using THREE only)
-			const bgWidth = 800*1.5; // 4:3 -> 800x600
-			const bgHeight = 600*1.5;
+			const bgWidth = 800*2; // 4:3 -> 800x600
+			const bgHeight = 600*2;
 			const bgGeo = new THREE.PlaneGeometry(bgWidth, bgHeight);
 			const bgMat = new THREE.MeshBasicMaterial({ color: 0x0000ff });
 			const bgPlane = new THREE.Mesh(bgGeo, bgMat);
 			bgPlane.position.set(0, 0, -100); // place behind content
 			scene.add(bgPlane);
-      waveLine = createWave(new THREE.Vector3(0, 300, 0), 68, 0.08, 0.25, 2, 0xffffff);
-      waveLine2 = createWave(new THREE.Vector3(0, 300, 0), 68, 0.04, 0.2, 1, 0xffffff);
+      		waveLine = createWave(new THREE.Vector3(0, 400, 0), 100, 0.08, 0.25, 2, 0xffffff);
+      		waveLine2 = createWave(new THREE.Vector3(0, 400, 0), 100, 0.04, 0.2, 1, 0xffffff);
 
 			const bios = [
 				{ name: 'X', desc: 'นักพัฒนาเว็บ ชื่นชอบงานด้านภาพและอินเทอร์แอคทีฟ', img: 'res/sample.jpg' },
